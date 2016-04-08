@@ -74,10 +74,10 @@ def url_root(path: str) -> str:
     """ return the root of a slash or hash-separated URL
     :param path: url
     :return: """
-    return path.rsplit('#', 1)[0] if '#' in path else path.rsplit('#', 1)[0]
+    return path.rsplit('#', 1)[0] if '#' in path else path.rsplit('/', 1)[0]
 
 
-def tip(path: str) -> str:
+def url_leaf(path: str) -> str:
     """ return the 'leaf' of a slash or hash-separated URL
     :param path: url
     :return:
@@ -214,11 +214,11 @@ class FHIRType:
             else:
                 ref = "http://schema.org/Text"
             self._type.typeUrl = ref
-            self._type.typeCode = tip(ref)
+            self._type.typeCode = url_leaf(ref)
         else:
             if typ.code == 'Reference' and 'profile' in typ:
                 assert len(typ.profile) == 1
-                code = tip(typ.profile[0])
+                code = url_leaf(typ.profile[0])
             else:
                 code = type_map.get(typ.code, typ.code)
             self._type.typeUrl = url_root(owner.ownerUrl) + '/' + code

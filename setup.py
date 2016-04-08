@@ -12,7 +12,7 @@ if sys.version_info < (3, 5):
 
 setup(
     name='fhir_to_sdo',
-    version='0.1.0',
+    version='0.1.1',
     packages=['fhir_to_sdo'],
     url='http://github.com/crDDI/fhir_to_sdo',
     license='Apache License 2.0',
