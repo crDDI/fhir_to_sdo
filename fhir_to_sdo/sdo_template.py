@@ -27,12 +27,10 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # A Schema.org template
-from typing import List
+from typing import List, Optional
 from fhir_to_sdo.fhir_structured_definition import FHIRStructuredDefinition, defined_value_sets
+from fhir_to_sdo.w5_metadata import W5Entry
 
-prefix = 'fhir:'
-version = '0.1'
-base = 'fhir.schema.org'
 
 header = """<!DOCTYPE html>
 <html>
@@ -69,8 +67,12 @@ body = """
 </html>"""
 
 
-def sdo_template(defs: List[FHIRStructuredDefinition]) -> str:
-    return header + body % dict(globals(),
-                                classes='\n\t'.join([fsd.sdo_class() for fsd in defs]),
-                                props='\n\t'.join([fsd.sdo_properties() for fsd in defs]),
-                                valuesets=defined_value_sets.sdo_valuesets())
+def sdo_template(ontology: List[W5Entry], defs: Optional[List[FHIRStructuredDefinition]], version: str,
+                 base: str = 'fhir.schema.org', prefix: str='fhir') -> str:
+    if defs is None:
+        defs = []
+    classes = '\n\t'.join([ontent.sdo_class() for ontent in ontology]) + '\n\t' + \
+              '\n\t'.join([fsd.sdo_class() for fsd in defs])
+    props = '\n\t'.join([fsd.sdo_properties() for fsd in defs])
+    valuesets = defined_value_sets.sdo_valuesets()
+    return header + body % vars()

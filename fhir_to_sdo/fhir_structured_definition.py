@@ -25,9 +25,11 @@
 # LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
+import os
 from jsonasobj import JsonObj, load, loads
-from typing import Union, List
+from typing import Union, List, Optional
 from requests import get
+from fhir_to_sdo.w5_metadata import FHIR_SDO
 
 fname = str
 json_txt = str
@@ -52,6 +54,25 @@ type_map = {'base64binary': 'Text',
             'unsignedint': 'Number',
             'uri': 'Text',
             'uuid': 'Text'}
+
+# Templates
+def schema_class(url: str, name: str, desc: str, subclass: str) -> str:
+    urlf = fix_url(url)
+    return """<div typeof="rdfs:Class" resource="%(urlf)s">
+  <span class="h" property="rdfs:label">fhir:%(name)s</span>%(desc)s%(subclass)s
+  <link property="http://schema.org/isPartOf" href="http://fhir.schema.org" />
+</div>""" % vars()
+
+
+def schema_description(description: str) -> str:
+    desc = esc(description)
+    return ('\n  <span property="rdfs:comment">%s</span>' % desc) if desc else ''
+
+
+def schema_subclass(parenturi: str, parentns: str, parenttype: str) -> str:
+    parenturi = fix_url(parenturi)
+    return  '\n  <span>Subclass of: <a property="rdfs:subClassOf" ' \
+            'href="%(parenturi)s">%(parentns)s%(parenttype)s</a></span>' % vars()
 
 
 def dotted_root(path: str) -> str:
@@ -103,24 +124,30 @@ class FHIRStructuredDefinition:
         """ Construct a FHIR StructuredDefinition from a source file name, file or string
         :param source: JSON source
         """
-        if hasattr(source, 'read'):
+        valueset_directory = None
+        if hasattr(source, 'read'):             # an open file
             self._obj = load(source)
-        elif source.strip().startswith('{'):
+        elif source.strip().startswith('{'):    # a dictionary in text form
             self._obj = loads(source)
         else:
-            self._obj = load(open(source))
-        self.elements = [FHIRElement(self._obj, e) for e in self._obj.snapshot.element
+            self._obj = load(open(source))      # a file name
+            valueset_directory = os.path.dirname(source)
+        self.elements = [FHIRElement(self._obj, e, valueset_directory) for e in self._obj.snapshot.element
                          if '.' in e.path and self._significant_differential(e)]
 
     def should_process(self) -> bool:
-        """ Return True if this structured definition should be included as part of schema.org entry
-        :return:
+        """ Return True if this structured definition should be included as part of schema.org entry.
+        :return: True means include
         """
         # The presence of a "_code" in a type variable instead of "code" seems to be indicitive of a primitive type
-        return not any(['_code' in typ for typ in [el.type for el in self._obj.snapshot.element if 'type' in el]])
+        return not any(['_code' in typ for typ in [el.type for el in self._obj.snapshot.element
+                                                   if 'type' in el]]) and not self._obj._get('kind', '') == 'datatype'
 
     def _significant_differential(self, sse: JsonObj) -> bool:
-        """ Determine whether the Snapshot Element in sse is considered significant from a schema.org perspective """
+        """ Determine whether the Snapshot Element in sse is considered significant from a schema.org perspective.
+        At the moment, this is determined by the presence of a 'type' element in the definition.
+        :param sse:
+         """
         for e in self._obj.differential.element:
             if e.path == sse.path and 'type' in e:
                 for t in e.type:
@@ -128,33 +155,52 @@ class FHIRStructuredDefinition:
                         return True
         return False
 
+    def parent_classes(self) -> str:
+        """ Return the schema subclass entries"""
+        rval = ''
+        for e in self._obj._get('snapshot', JsonObj())._get('element', []):
+            if e._get('path', '') == self._obj._get('name', None):
+                for m in e._get('mapping', []):
+                    if m.identity == 'w5':
+                        rval += schema_subclass(FHIR_SDO[m.map], 'w5:', m.map)
+        for e in self._obj._get('mapping', []):
+            if e.identity == 'w5' and not url_leaf(e.uri) == 'w5':
+                rval += schema_subclass(e.uri, 'w5:', url_leaf(e.uri))
+
+        base_url = self._obj._get('baseDefinition', None)
+        base_ns = 'fhir:'
+        if not base_url:
+            base_url = self._obj._get('base', None)
+        if not base_url and not rval:
+            base_url = 'http://schema.org/Thing'
+            base_ns = ''
+
+        base_type = self._obj._get('baseType', None)
+        if not base_type:
+            base_type = self._obj._get('constrainedType', None)
+        if base_url:
+            rval += schema_subclass(base_url, base_ns, base_type if base_type else url_leaf(base_url))
+        return rval
+
     def sdo_class(self):
-        url = fix_url(self._obj.url)
-        name = esc(self._obj.name)
-        description = esc(self._obj.description)
-        baseDefinition = fix_url(self._obj.baseDefinition) if 'baseDefinition' in self._obj else "http://schema.org/CreativeWork"
-        baseType = 'fhir:' + self._obj.baseType if 'baseType' in self._obj else 'CreativeWork'
-        return """<div typeof="rdfs:Class" resource="%(url)s">
-  <span class="h" property="rdfs:label">fhir:%(name)s</span>
-  <span property="rdfs:comment">%(description)s</span>
-  <span>Subclass of: <a property="rdfs:subClassOf" href="%(baseDefinition)s">%(baseType)s</a></span>
-  <link property="http://schema.org/isPartOf" href="http://fhir.schema.org" />
-</div>""" % vars()
+        return schema_class(self._obj.url, self._obj.name, schema_description(self._obj.description), self.parent_classes())
 
     def sdo_properties(self):
         return '\n\t'.join([e.sdo_property() for e in self.elements])
 
 
 class FHIRElement:
-    def __init__(self, owner: FHIRStructuredDefinition, ele: JsonObj) -> None:
+    def __init__(self, owner: JsonObj, ele: JsonObj, vsdir: Optional[str]) -> None:
         """ An Element in a FHIR Structured Definition.
         :param owner:  Owning FHIR Structured Definition
         :param ele: JSON of snapshot element
+        :param vsdir: value set directory name
         """
         self._obj = ele
         self._obj.fullUrl = fix_url(url_root(owner.url) + '/' + ele.path)
         self._obj.ownerUrl = fix_url(owner.url)
         self._obj.ownerLabel = esc(owner.name)
+        self._obj._vsdir = vsdir
         if 'definition' not in ele:
             self._obj.definition = "No definition supplied"
         else:
@@ -178,7 +224,7 @@ class FHIRElement:
         :param types: Element "type" entry -- references a list of codes
         :return: schema.org Property entry
         """
-        self._obj.typeList = FHIRTypes(self, types).sdo_range()
+        self._obj.typeList = FHIRTypes(self, types, self._obj._vsdir).sdo_range()
         return """<div typeof="rdf:Property" resource="%(fullUrl)s">
       <span class="h" property="rdfs:label">fhir:%(path)s</span>
       <span property="rdfs:comment">%(definition)s</span>
@@ -189,26 +235,27 @@ class FHIRElement:
 
 
 class FHIRTypes:
-    def __init__(self, owner: FHIRElement, types: List[JsonObj]):
+    def __init__(self, owner: FHIRElement, types: List[JsonObj], vsdir: Optional[str]):
         """ A FHIR Type entry.  typ is guaranteed to have at least one element with a 'code' entry """
-        self._types = [FHIRType(owner._obj, t) for t in types]
+        self._types = [FHIRType(owner._obj, t, vsdir) for t in types]
 
     def sdo_range(self):
         return '\n\t'.join([t.sdo_range() for t in self._types])
 
 
 class FHIRType:
-    def __init__(self, owner: JsonObj, typ: JsonObj) -> None:
+    def __init__(self, owner: JsonObj, typ: JsonObj, vsdir: Optional[str]) -> None:
         """ Process a  type entry in a set of types for a FHIR Element
         :param owner: Containing FHIR Element
         :param typ: entry in element "type" list
+        :param vsdir: value set directory
         """
         self._type = typ
         if typ.code in ('code', 'CodeableConcept') and 'binding' in owner:
             if 'valueSetReference' in owner.binding:
                 ref = owner.binding.valueSetReference.reference
-                if owner.binding.strength == "required":
-                    defined_value_sets.add(ref)
+                if True or owner.binding.strength == "required":
+                    defined_value_sets.add(ref, vsdir)
             elif 'valueSetUri' in owner.binding:
                 ref = owner.binding.valueSetUri
             else:
@@ -235,9 +282,14 @@ class FHIRValueSetRefs:
     def __init__(self):
         self.defined_sets = dict()
 
-    def add(self, ref: str) -> None:
+    def add(self, ref: str, vsdir: Optional[str]) -> None:
+        """ Add a value set reference
+        :param ref: value set name
+        :param vsdir: value set definition directory.  If not supplied, use the value set server
+        :return:
+        """
         if ref not in self.defined_sets:
-            self.defined_sets[ref] = FHIRValueSetReference(ref)
+            self.defined_sets[ref] = FHIRValueSetReference(ref, vsdir)
 
     def sdo_valuesets(self):
         return '\n\t'.join([e.sdo_valueset() for e in self.defined_sets.values()])
@@ -247,27 +299,40 @@ defined_value_sets = FHIRValueSetRefs()
 
 
 class FHIRValueSetReference:
-    def __init__(self, reference: str) -> None:
+    def __init__(self, reference: str, vsdir: str) -> None:
         """ A value set reference container
         :param reference: URI of the reference value set
+        :param vsdir: value set definition directory.  If not supplied, use the value set server
         """
         self._reference = reference
+        self._vsdir = vsdir
 
-    def sdo_valueset(self):
+    def sdo_valueset_file(self) -> Optional[JsonObj]:
+        """ Retrieve the value set from the FHIR downloads """
+        if self._vsdir:
+            vsfile = os.path.join(self._vsdir, "valueset-" + self._reference.split('ValueSet/')[1] + ".json")
+            if os.path.exists(vsfile):
+                return load(open(vsfile))
+        return None
+
+    def sdo_valueset(self) -> str:
         """ Return a schema.org representation of the value set
         :return:
         """
         # TODO: This URL should really be a terminology service expand call, but the documented method doesn't work
-        resp = get(self._reference, headers={'accept': 'application/json'})
         rval = ''
-        if resp.ok:
-            vsdef = loads(resp.text)
+        vsdef = self.sdo_valueset_file()
+        if not vsdef:
+            resp = get(self._reference, headers={'accept': 'application/json'})
+            if resp.ok:
+                vsdef = loads(resp.text)
+            else:
+                print("ValueSet access error: %s (%s)" % (self._reference, resp.reason))
+        if vsdef:
             rval = self.sdo_valueset_header(vsdef.url, vsdef.id, vsdef.name)
             if 'codeSystem' in vsdef and 'concept' in vsdef.codeSystem:
                 cs = vsdef.codeSystem
                 rval += '\n\t'.join([self.sdo_concept(vsdef.url, vsdef.id, cs.system, c) for c in cs.concept])
-        else:
-            print("ValueSet access error: %s (%s)" % (self._reference, resp.reason))
         return rval
 
     @staticmethod

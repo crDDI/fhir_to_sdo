@@ -36,7 +36,7 @@ Note that the above function can take considerable time, as the zipped image of 
 (fhirtosdo) > fhirtosdo -id data/site -o fhir_core.rdfa --loglevel INFO 
 ```
 
-Note that the above transformation may generate a numbe of error messages of the form
+Note that the above transformation may generate a number of error messages of the form
  "ValueSet access error: http://hl7.org/fhir/ValueSet/measure-population (Not Found)".  This is because not all of the
  value sets referenced in the FHIR structure definitions are currently available on the official fhir website.
  
