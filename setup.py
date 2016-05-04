@@ -6,13 +6,13 @@ except ImportError:
     from distutils.core import setup
 
 # typing library was introduced as a core module in version 3.5.0
-requires = ["dirlistproc", "jsonasobj", "hcls-fhir-rdf"]
+requires = ["dirlistproc", "jsonasobj", "hcls-fhir-rdf>=0.1.3"]
 if sys.version_info < (3, 5):
     requires.append("typing")
 
 setup(
     name='fhir_to_sdo',
-    version='0.1.1',
+    version='0.2.0',
     packages=['fhir_to_sdo'],
     url='http://github.com/crDDI/fhir_to_sdo',
     license='Apache License 2.0',

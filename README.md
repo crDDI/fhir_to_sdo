@@ -31,14 +31,23 @@ To download the latest copy of the FHIR spec and unzip it:
 
 Note that the above function can take considerable time, as the zipped image of the fhir spec is quite large.  Note that the "-u" option can be used to download different fhir builds as needed
 
+## Downloading the FHIR metadata specification
+Currently it is possible to get a copy of the FHIR 'ontology' from the FHIR svn repository as ```./build/publish/fhir.ttl``` An image of a recent fhir.ttl is also available in ```./data/ttl/fhir.ttl``` in this distribution.
+
+## Run the w5tosdo transformation
+```bash
+(fhirtosdo) > w5tosdo -i ../data/ttl/fhir.ttl -o w5.rdfa --loglevel INFO
+```
+
 ## Run the fhirtosdo transformation
 ```bash
-(fhirtosdo) > fhirtosdo -id data/site -o fhir_core.rdfa --loglevel INFO 
+(fhirtosdo) > fhirtosdo -id data/site -o fhir.rdfa --loglevel INFO 
 ```
+The results of these two transformation
 
 Note that the above transformation may generate a number of error messages of the form
  "ValueSet access error: http://hl7.org/fhir/ValueSet/measure-population (Not Found)".  This is because not all of the
  value sets referenced in the FHIR structure definitions are currently available on the official fhir website.
  
- The output (fhir_core.rdfa) can then be transferred to the [schema.org](https://github.com/schemaorg/schemaorg) environment.
+ The outputs (w5.rdfa, fhir.rdfa) can then be transferred to the [schema.org](https://github.com/crDDI/schemaorg/schemaorg) environment.
 
