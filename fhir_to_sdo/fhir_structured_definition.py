@@ -183,7 +183,8 @@ class FHIRStructuredDefinition:
         return rval
 
     def sdo_class(self):
-        return schema_class(self._obj.url, self._obj.name, schema_description(self._obj.description), self.parent_classes())
+        return schema_class(self._obj.url, self._obj.name, schema_description(self._obj.description),
+                            self.parent_classes())
 
     def sdo_properties(self):
         return '\n\t'.join([e.sdo_property() for e in self.elements])

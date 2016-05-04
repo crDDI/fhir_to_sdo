@@ -41,10 +41,9 @@ if __name__ == "__main__":
 
 from fhir_to_sdo.fhir_structured_definition import FHIRStructuredDefinition
 from fhir_to_sdo.sdo_template import sdo_template
-from fhir_to_sdo.w5_metadata import W5Metadata
 
 DEFAULT_LOG_FILE = os.path.join(script_path, os.path.basename(__file__) + ".log")
-DEFAULT_LOGGING_LEVEL = logging.getLevelName(logging.WARNING)
+DEFAULT_LOGGING_LEVEL = logging.getLevelName(logging.INFO)
 
 logNames = [logging.getLevelName(l) for l in [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR]]
 
@@ -53,6 +52,9 @@ def addargs(parser: argparse.ArgumentParser) -> None:
     """ Add local args to the dirlistproc set. Stub
     :param parser: dirlistproc parser
     """
+    parser._get_option_tuples('--indir')[0][0].required = True
+    parser._get_option_tuples('--indir')[0][0].help = "FHIR Definition Directory (typically data/site)"
+    parser._get_option_tuples('--outfile')[0][0].help = "Schema.org output file (typically fhir.rdfs)"
     parser.add_argument("--logfile", help="Logging file. Default is '%s'" % DEFAULT_LOG_FILE, default=DEFAULT_LOG_FILE)
     parser.add_argument("--loglevel", help="Logging level. Default is %s" % DEFAULT_LOGGING_LEVEL,
                         default=DEFAULT_LOGGING_LEVEL,
@@ -97,13 +99,18 @@ def proc_profile(input_fn: str, _: str, opts: argparse.Namespace) -> bool:
 
 
 def main():
-    dlp = DirectoryListProcessor(None, "Generate schema.org definitions from FHIR", ".profile.json", None, addargs, procargs)
+    dlp = DirectoryListProcessor(None, "Generate schema.org definitions from FHIR", ".profile.json",
+                                 None, addargs, procargs)
     dlp.opts._defs = []
     nfiles, nsuccess = dlp.run(proc_profile, inp_filtr)
     outf = open(dlp.opts.outfile[0], 'w') if dlp.opts.outfile else sys.stdout
     print(sdo_template([], dlp.opts._defs, version="0.1"), file=outf)
 
     logging.info("Total files processed=%d Errors=%d" % (nfiles, nfiles - nsuccess))
+    logging.info("Output written to %s" % dlp.opts.outfile[0] if dlp.opts.outfile else "STDOUT")
+    if dlp.opts.outfile:
+        print("Total files processed=%d Errors=%d" % (nfiles, nfiles - nsuccess))
+        print("%s written" % dlp.opts.outfile[0])
 
 
 if __name__ == '__main__':

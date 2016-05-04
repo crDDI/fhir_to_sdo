@@ -44,7 +44,7 @@ if __name__ == "__main__":
 from fhir_to_sdo.w5_metadata import W5Metadata
 
 DEFAULT_LOG_FILE = os.path.join(script_path, os.path.basename(__file__) + ".log")
-DEFAULT_LOGGING_LEVEL = logging.getLevelName(logging.WARNING)
+DEFAULT_LOGGING_LEVEL = logging.getLevelName(logging.INFO)
 
 logNames = [logging.getLevelName(l) for l in [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR]]
 
@@ -55,7 +55,6 @@ def addargs(parser: argparse.ArgumentParser) -> None:
     """
     parser._get_option_tuples('--infile')[0][0].required = True
     parser._get_option_tuples('--infile')[0][0].help = "W5 Ontology file (typically fhir.ttl)"
-    parser._get_option_tuples('--outfile')[0][0].required = True
     parser._get_option_tuples('--outfile')[0][0].help = "Schema.org output file"
     parser.add_argument("--logfile", help="Logging file. Default is '%s'" % DEFAULT_LOG_FILE, default=DEFAULT_LOG_FILE)
     parser.add_argument("--loglevel", help="Logging level. Default is %s" % DEFAULT_LOGGING_LEVEL,
@@ -77,7 +76,9 @@ def main():
     w5m = W5Metadata(os.path.join(script_path, '..', 'data', 'ttl', 'fhir.ttl'))
     outf = open(dlp.opts.outfile[0], 'w') if dlp.opts.outfile else sys.stdout
     print(sdo_template(w5m.as_sdo(), None, dlp.opts.version, prefix='w5', base='w5.schema.org'), file=outf)
-    logging.info("W5 File Processed")
+    logging.info("Output written to %s" % dlp.opts.outfile[0] if dlp.opts.outfile else "STDOUT")
+    if dlp.opts.outfile:
+        print("%s written" % dlp.opts.outfile[0])
 
 
 if __name__ == '__main__':
